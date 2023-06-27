@@ -4,7 +4,7 @@ use lib_game::vector::Vec2;
 use lib_game::Direction;
 
 
-use crate::entity::{Entity,Goomba,MysteryBlocks};
+use crate::entity::{Dynamic, Entity, Goomba, MysteryBlocks};
 use crate::player::Player;
 use crate::map::Map;
 
@@ -19,7 +19,6 @@ const PLAYER_VELOCITY: f32 = 2.0;
 pub enum GameStatus {
 
     GamePlay,
-    Pause,
     Win
 
 }
@@ -30,7 +29,6 @@ pub struct State {
     game_status:        GameStatus,
     player:             Player,
     map:                Map,
-    scrolling_offset:   f32,
     goombas:            Vec<Goomba>,
     mystery_blocks:     Vec<MysteryBlocks>,
     win_message:        Texture2D
@@ -105,7 +103,6 @@ impl State {
             player,
             map,
             goombas,
-            scrolling_offset: 0.0,
             mystery_blocks,
             win_message
         })
@@ -167,12 +164,13 @@ impl State {
 
         if self.game_status == GameStatus::GamePlay {
 
-            self.player.update(self.map.get_tiles(),&mut self.mystery_blocks,&mut self.goombas);
+            self.player.update(
+                (self.map.get_tiles(),&mut self.mystery_blocks,&mut self.goombas)
+            );
 
 
             if self.player.get_y() <= 0.0 {
                 self.reset();
-
             }
 
 
@@ -201,23 +199,26 @@ impl State {
             }
 
 
+            //  check if player arrive to a zone and if so activate some goombas
+
             if self.player.get_x() >= 1080.0 {
-                self.goombas[4].defreeze();
-                self.goombas[5].defreeze();
+                self.goombas[4].unfreeze();
+                self.goombas[5].unfreeze();
             }
 
             if self.player.get_x() >= 1328.0 {
-                self.goombas[6].defreeze();
-                self.goombas[7].defreeze();
+                self.goombas[6].unfreeze();
+                self.goombas[7].unfreeze();
             }
 
             if self.player.get_x() >= 1800.0 {
-                self.goombas[8].defreeze();
-                self.goombas[9].defreeze();
-                self.goombas[10].defreeze();
-                self.goombas[11].defreeze();
+                self.goombas[8].unfreeze();
+                self.goombas[9].unfreeze();
+                self.goombas[10].unfreeze();
+                self.goombas[11].unfreeze();
             }
 
+            // when player pass the flag he win
             if self.player.get_x() >= 3200.0 {
                 self.game_status = GameStatus::Win;
             }
@@ -283,8 +284,6 @@ impl State {
 
 
             }
-
-            _ => {}
 
         }
 

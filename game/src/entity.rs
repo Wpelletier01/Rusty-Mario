@@ -6,12 +6,10 @@ use crate::declaration::{
     HEIGHT,
     NORM_HEIGHT_TILE_SIZE,
     NORM_WIDTH_TILE_SIZE,
-    MAP_WIDTH,
-    MAP_HEIGHT,
-    GRAVITY
 };
+
 use lib_game::GResult;
-use lib_game::shape::{Circle, Rect, Shape, ShapeType};
+use lib_game::shape::{Rect, Shape};
 use lib_game::tile::TileInfo;
 use lib_game::vector::Vec2;
 use lib_game::collision;
@@ -32,21 +30,39 @@ use macroquad::prelude::{
 
 use crate::map::TileMap;
 
+// Basic trait and utility ==============================================
 
 pub trait Entity {
-
-    fn get_shape_type(&self) -> ShapeType;
+    /// draw the entity component to the screen with is current data
     fn draw(&self);
-    fn get_normalized_position(&self) -> (f32,f32);
-
 
 }
 
 pub trait SpriteUser {
-
+    /// change the texture descriptor with the current sprite info
     fn reload_sprite(&mut self);
 
 }
+
+pub trait Dynamic<T> {
+
+    /// reset to default value the data of the struct
+    fn reset(&mut self);
+    /// perform calculation before the drawing call
+    fn update(&mut self,entity:T);
+
+}
+
+/// return the pixel world data normalized between -1 and 1
+pub fn get_normalized_position(pos:&Vec2) -> (f32,f32) {
+
+    (
+        (pos.x) / (WIDTH/2.0) - 1.0,
+        (pos.y) / (HEIGHT/2.0) - 1.0
+    )
+
+}
+
 
 
 
@@ -89,11 +105,10 @@ impl Tile {
 
 impl Entity for Tile {
 
-    fn get_shape_type(&self) -> ShapeType { ShapeType::Rect }
 
     fn draw(&self) {
 
-        let (x,y) = self.get_normalized_position();
+        let (x,y) = get_normalized_position(&self.shape.pos);
 
         draw_texture_ex(
             self.texture,
@@ -106,17 +121,9 @@ impl Entity for Tile {
 
     }
 
-    fn get_normalized_position(&self) -> (f32,f32) {
-
-        (
-            (self.shape.get_x()) / (WIDTH/2.0) - 1.0,
-            (self.shape.get_y()) / (HEIGHT/2.0) - 1.0
-        )
-
-    }
-
 
 }
+
 
 
 // Enemy =============================
@@ -125,21 +132,23 @@ const GVELOCITY: f32 = 1.0;
 
 
 pub struct Goomba {
-    spos:       Vec2,
-    sdirection: Direction,
-    sfreeze:    bool,
-    shape:      Rect,
-    texture:    Texture2D,
-    draw_info:  DrawTextureParams,
-    spritesheet: SpriteSheet,
-    velocity:   Vec2,
-    direction:  Direction,
+    // start value
+    spos:           Vec2,
+    sdirection:     Direction,
+    //
+    sfreeze:        bool, // should the it wait the player arrived at a certain location
+    shape:          Rect,
+    texture:        Texture2D,
+    draw_info:      DrawTextureParams,
+    spritesheet:    SpriteSheet,
+    velocity:       Vec2,
+    direction:      Direction,
     walk_frame_cnt: u8,
-    die_frame_cnt: u8,
+    die_frame_cnt:  u8,
     dead:           bool,
     disappear:      bool,
     freeze:         bool,
-    fall_ctn:      u8,
+    fall_ctn:       u8,
 }
 
 impl Goomba {
@@ -149,7 +158,7 @@ impl Goomba {
         let p = format!("{}/goomba.png",ASSETS_DIR);
 
         let tex = load_texture(&p).await?;
-        let mut spritesheet = SpriteSheet::new(&p,TILE_SIZE,TILE_SIZE);
+        let mut spritesheet = SpriteSheet::new(TILE_SIZE,TILE_SIZE);
 
         spritesheet.add_sprite("walk",2,0.0,0.0,1.0)?;
         spritesheet.add_sprite("dead",1,34.0,0.0,0.0)?;
@@ -190,114 +199,14 @@ impl Goomba {
 
     pub fn is_dying(&self) -> bool { self.dead }
     pub fn is_disappear(&self) -> bool { self.disappear }
-    pub fn defreeze(&mut self) { self.freeze = false; }
+    pub fn unfreeze(&mut self) { self.freeze = false; }
     pub fn die(&mut self) {
-
         if !self.dead {
             self.dead = true;
             self.spritesheet.change_current("dead").unwrap();
             self.reload_sprite();
         }
-
-
     }
-
-    pub fn reset(&mut self) {
-        self.shape.pos = self.spos;
-        self.direction = self.sdirection;
-        self.freeze = self.sfreeze;
-
-        self.disappear = false;
-        self.dead = false;
-        self.die_frame_cnt = 0;
-
-
-        self.spritesheet.change_current("walk").unwrap();
-        self.reload_sprite();
-
-    }
-
-
-
-
-    pub fn update(&mut self, tiles:&TileMap) {
-
-
-
-        if !self.dead && !self.freeze  {
-
-            match self.direction {
-                Direction::Left => self.velocity.x = -GVELOCITY,
-                Direction::Right => self.velocity.x = GVELOCITY,
-                _ => {}
-            }
-
-            let mut gravity_velocity = (self.fall_ctn as f32 / 60.0 ) * -5.0;
-            if gravity_velocity < -5.0 {
-                gravity_velocity = -5.0;
-            }
-
-            self.fall_ctn += 1;
-            self.velocity.y += gravity_velocity;
-
-
-
-            for tile in tiles.iter() {
-
-                if tile.is_a_wall() && collision::rect_vs_rect_vertically(
-                    &self.shape,
-                    tile.get_rect(),
-                    self.velocity.y)  {
-
-                    self.velocity.y = 0.0;
-                    self.shape.pos.y = tile.get_rect().get_y() + TILE_SIZE;
-                    self.fall_ctn = 0;
-                }
-
-                if tile.is_a_wall() && collision::rect_vs_rect_horizontally(
-                    &self.shape,
-                    tile.get_rect(),
-                    self.velocity.x) {
-
-                    if self.velocity.x > 0.0 {
-
-                        self.direction = Direction::Left;
-                        self.velocity.x = -GVELOCITY;
-
-                    } else {
-                        self.direction = Direction::Right;
-                        self.velocity.x = GVELOCITY;
-                    }
-
-                }
-
-
-
-
-            }
-
-
-            if self.direction == Direction::Left && self.shape.pos.x + self.velocity.x <= 0.0 {
-                self.direction = Direction::Right;
-                self.velocity.x = GVELOCITY;
-            }
-
-
-            self.shape.pos += self.velocity;
-
-            if self.shape.get_y() <= 0.0 {
-                self.dead = true;
-                self.disappear = true;
-            }
-
-        }
-
-
-        self.update_sprite();
-
-
-    }
-
 
 
     fn update_sprite(&mut self) {
@@ -330,10 +239,10 @@ impl Goomba {
 }
 
 impl Entity for Goomba {
-    fn get_shape_type(&self) -> ShapeType { ShapeType::Rect }
+
     fn draw(&self) {
 
-        let (nx,ny) = self.get_normalized_position();
+        let (nx,ny) = get_normalized_position(&self.shape.pos);
 
         draw_texture_ex(
             self.texture,
@@ -344,14 +253,102 @@ impl Entity for Goomba {
         );
 
     }
-    fn get_normalized_position(&self) -> (f32, f32) {
-        (
-            (self.shape.get_x()) / (WIDTH/2.0) - 1.0,
-            (self.shape.get_y()) / (HEIGHT/2.0) - 1.0
-        )
+
+
+
+}
+
+impl Dynamic<&TileMap> for Goomba {
+
+    fn reset(&mut self) {
+        self.shape.pos = self.spos;
+        self.direction = self.sdirection;
+        self.freeze = self.sfreeze;
+
+        self.disappear = false;
+        self.dead = false;
+        self.die_frame_cnt = 0;
+
+
+        self.spritesheet.change_current("walk").unwrap();
+        self.reload_sprite();
+    }
+
+    fn update(&mut self, objects: &TileMap) {
+
+        if !self.dead && !self.freeze  {
+
+            match self.direction {
+                Direction::Left => self.velocity.x = -GVELOCITY,
+                Direction::Right => self.velocity.x = GVELOCITY,
+                _ => {}
+            }
+
+            let mut gravity_velocity = (self.fall_ctn as f32 / 60.0 ) * -5.0;
+            if gravity_velocity < -5.0 {
+                gravity_velocity = -5.0;
+            }
+
+            self.fall_ctn += 1;
+            self.velocity.y += gravity_velocity;
+
+
+
+            for tile in objects.iter() {
+
+                if tile.is_a_wall() && collision::rect_vs_rect_vertically(
+                    &self.shape,
+                    tile.get_rect(),
+                    self.velocity.y)  {
+
+                    self.velocity.y = 0.0;
+                    self.shape.pos.y = tile.get_rect().get_y() + TILE_SIZE;
+                    self.fall_ctn = 0;
+                }
+
+                if tile.is_a_wall() && collision::rect_vs_rect_horizontally(
+                    &self.shape,
+                    tile.get_rect(),
+                    self.velocity.x) {
+
+                    if self.velocity.x > 0.0 {
+
+                        self.direction = Direction::Left;
+                        self.velocity.x = -GVELOCITY;
+
+                    } else {
+                        self.direction = Direction::Right;
+                        self.velocity.x = GVELOCITY;
+                    }
+                }
+            }
+
+
+            if self.direction == Direction::Left && self.shape.pos.x + self.velocity.x <= 0.0 {
+                self.direction = Direction::Right;
+                self.velocity.x = GVELOCITY;
+            }
+
+
+
+            self.shape.pos += self.velocity;
+
+
+
+            if self.shape.get_y() <= 0.0 {
+                self.dead = true;
+                self.disappear = true;
+            }
+
+        }
+
+
+        self.update_sprite();
     }
 
 }
+
+
 
 impl SpriteUser for Goomba {
     fn reload_sprite(&mut self) {
@@ -388,7 +385,7 @@ impl MysteryBlocks {
 
         let tex = load_texture(&p).await?;
 
-        let mut spritesheet = SpriteSheet::new(&p,TILE_SIZE,TILE_SIZE);
+        let mut spritesheet = SpriteSheet::new(TILE_SIZE,TILE_SIZE);
 
         spritesheet.add_sprite("normal",3,0.0,0.0,0.0)?;
         spritesheet.add_sprite("collected",1,48.0,0.0,0.0)?;
@@ -418,8 +415,6 @@ impl MysteryBlocks {
     }
 
     pub fn update(&mut self) {
-
-
         self.update_sprite();
     }
 
@@ -434,10 +429,8 @@ impl MysteryBlocks {
 
     }
 
-
     pub fn get_rect(&self) -> &Rect { &self.shape }
 
-    pub fn is_collected(&self) -> bool { self.collected }
 
     pub fn collect(&mut self) {
         if !self.collected {
@@ -474,9 +467,8 @@ impl MysteryBlocks {
 
 impl Entity for MysteryBlocks {
 
-    fn get_shape_type(&self) -> ShapeType { ShapeType::Rect }
     fn draw(&self) {
-        let (nx,ny) = self.get_normalized_position();
+        let (nx,ny) = get_normalized_position(&self.shape.pos);
 
         draw_texture_ex(
             self.texture,
@@ -487,14 +479,24 @@ impl Entity for MysteryBlocks {
         );
 
     }
-    fn get_normalized_position(&self) -> (f32, f32) {
-        (
-            (self.shape.get_x()) / (WIDTH/2.0) - 1.0,
-            (self.shape.get_y()) / (HEIGHT/2.0) - 1.0
-        )
-    }
+
+
 
 }
+
+impl Dynamic<()> for MysteryBlocks {
+    fn reset(&mut self) {
+        if self.collected {
+            self.collected = false;
+            self.spritesheet.change_current("normal").unwrap();
+            self.reload_sprite();
+        }
+    }
+
+    fn update(&mut self, _entity: ()) { self.update_sprite(); }
+
+}
+
 
 impl SpriteUser for MysteryBlocks {
     fn reload_sprite(&mut self) {

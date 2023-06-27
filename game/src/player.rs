@@ -1,9 +1,15 @@
 
-use crate::entity::{Entity, Goomba, MysteryBlocks, SpriteUser};
+use crate::entity::{
+    Entity,
+    Dynamic,
+    Goomba,
+    MysteryBlocks,
+    SpriteUser,
+    get_normalized_position
+};
+
 use crate::declaration::{
-    HEIGHT,
     TILE_SIZE,
-    WIDTH,
     NORM_HEIGHT_TILE_SIZE,
     NORM_WIDTH_TILE_SIZE,
     GRAVITY,
@@ -12,7 +18,7 @@ use crate::declaration::{
 };
 use crate::map::TileMap;
 
-use lib_game::shape::{Rect, Shape, ShapeType};
+use lib_game::shape::{Rect, Shape};
 use lib_game::vector::Vec2;
 use lib_game::sprite::SpriteSheet;
 use lib_game::GResult;
@@ -61,7 +67,7 @@ impl Player {
         let p = format!("{}/small-mario.png",ASSETS_DIR);
 
         let spritesheet_src = load_texture(&p).await?;
-        let mut spritesheet = SpriteSheet::new(&p,TILE_SIZE,TILE_SIZE);
+        let mut spritesheet = SpriteSheet::new(TILE_SIZE,TILE_SIZE);
 
         // sprite
         spritesheet.add_sprite("idle",1,77.0,0.0,0.0)?; // default
@@ -126,14 +132,13 @@ impl Player {
 
     pub fn get_x(&self) -> f32 { self.shape.pos.x }
     pub fn get_y(&self) -> f32 { self.shape.pos.y }
-
     pub fn get_rect(&self) -> &Rect { &self.shape }
-
     pub fn get_xvelocity(&self) -> f32 { self.velocity.x }
     pub fn get_yvelocity(&self) -> f32 { self.velocity.y }
+    pub fn get_height(&self) -> f32 { self.shape.get_height() }
 
     pub fn set_xvelocity(&mut self,x:f32) { self.velocity.x += x; }
-    pub fn get_height(&self) -> f32 { self.shape.get_height() }
+
     pub fn is_dying(&self) -> bool { self.status == PStatus::Dead }
 
     pub fn clear_velocity(&mut self) {
@@ -218,78 +223,13 @@ impl Player {
     }
 
 
-    pub fn update(&mut self,tiles:&TileMap,mblocks: &mut [MysteryBlocks], goombas: &mut [Goomba]) {
-
-        if self.status != PStatus::Dead {
-
-            if self.jumping {
-
-                if self.jump_ctn >= -10 {
-                    self.velocity.y += (self.jump_ctn as f32 + 10.0) * 0.5;
-                    self.jump_ctn -= 1;
-
-                } else {
-                    self.jumping = false;
-                    self.jump_ctn = 0;
-                }
-
-            }
-
-            let mut gravity_velocity = (self.fall_ctn as f32 / 60.0 ) * -GRAVITY;
-            if gravity_velocity < -5.0 {
-                gravity_velocity = -5.0;
-            }
-
-            self.fall_ctn += 1;
-            self.velocity.y += gravity_velocity;
-
-            if self.velocity.x + self.shape.pos.x < 0.0 {
-                self.velocity.x = 0.0;
-            }
-
-            self.check_collision_w_mblocks(mblocks);
-            self.check_collision_w_static(tiles);
-            self.check_collision_w_enemy(goombas);
-
-
-            if self.velocity.y == 0.0 {
-                self.can_jump = true;
-            } else if self.velocity.y < 0.0 {
-                self.can_jump = false;
-            }
-
-            self.shape.pos += self.velocity;
-
-            if self.status != PStatus::Dead {
-                if self.velocity.x == 0.0 && self.velocity.y == 0.0 {
-                    self.change_sprite_status(PStatus::Idle)
-                } else if self.velocity.x != 0.0 && self.velocity.y == 0.0 {
-                    self.change_sprite_status(PStatus::Walk);
-                } else if self.velocity.y != 0.0 {
-                    self.change_sprite_status(PStatus::Jump);
-                }
-
-            }
-
-
-        }
-
-        self.update_sprite().unwrap();
-
-    }
-
     fn die(&mut self) {
 
-
         self.clear_velocity();
-
         self.change_sprite_status(PStatus::Dead);
         self.dead_velocity = 10.0;
 
     }
-
-
-    fn get_drawinfo(&self) -> DrawTextureParams { self.draw_info.clone() }
 
 
     fn check_collision_w_mblocks(&mut self, mblocks: &mut [MysteryBlocks]) {
@@ -302,7 +242,10 @@ impl Player {
 
             if collision::rect_vs_rect(&tmp_rect,block.get_rect()) {
 
-                if collision::rect_vs_rect_horizontally(&self.shape,block.get_rect(),self.get_xvelocity()) {
+                if collision::rect_vs_rect_horizontally(
+                    &self.shape,
+                    block.get_rect(),
+                    self.get_xvelocity()) {
 
                     if self.velocity.x > 0.0 {
 
@@ -318,7 +261,10 @@ impl Player {
 
                 }
 
-                if collision::rect_vs_rect_vertically(&self.shape,block.get_rect(),self.get_yvelocity()) {
+                if collision::rect_vs_rect_vertically(
+                    &self.shape,
+                    block.get_rect(),
+                    self.get_yvelocity()) {
 
                     if self.get_yvelocity() < 0.0 {
 
@@ -358,29 +304,24 @@ impl Player {
             tmp_rect.pos += self.velocity;
 
             if !goomba.is_dying() && collision::rect_vs_rect(&tmp_rect,goomba.get_rect()) {
-                if collision::rect_vs_rect_vertically(self.get_rect(),goomba.get_rect(),self.get_yvelocity()) {
-                    if self.velocity.y < 0.0 {
+                if collision::rect_vs_rect_vertically(
+                    self.get_rect(),
+                    goomba.get_rect(),
+                    self.get_yvelocity()) {
 
+                    if self.velocity.y < 0.0 {
                         goomba.die();
                     } else {
-
                         self.die();
                         break;
-
                     }
 
                 } else {
-
                     self.die();
                     break;
-
                 }
 
-
-
             }
-
-
 
         }
 
@@ -396,7 +337,10 @@ impl Player {
 
             if tile.is_a_wall() && collision::rect_vs_rect(&tmp_rect, tile.get_rect()) {
 
-                if collision::rect_vs_rect_horizontally(self.get_rect(),tile.get_rect(),self.get_xvelocity()) {
+                if collision::rect_vs_rect_horizontally(
+                    self.get_rect(),
+                    tile.get_rect(),
+                    self.get_xvelocity()) {
 
                     if self.get_xvelocity() > 0.0 {
 
@@ -414,7 +358,10 @@ impl Player {
 
                 }
 
-                if collision::rect_vs_rect_vertically(self.get_rect(),tile.get_rect(),self.get_yvelocity()) {
+                if collision::rect_vs_rect_vertically(
+                    self.get_rect(),
+                    tile.get_rect(),
+                    self.get_yvelocity()) {
 
                     if self.get_yvelocity() < 0.0 {
 
@@ -481,34 +428,98 @@ impl Player {
 
 impl Entity for Player {
 
-    fn get_shape_type(&self) -> ShapeType { ShapeType::Rect }
-
     fn draw(&self) {
 
-        let (nx,ny) = self.get_normalized_position();
+        let (nx,ny) = get_normalized_position(&self.shape.pos);
 
         draw_texture_ex(
             self.spritesheet_src,
             nx,
             ny,
             WHITE,
-            self.get_drawinfo()
+            self.draw_info.clone()
         );
 
 
     }
 
-    fn get_normalized_position(&self) -> (f32,f32) {
 
-        (
-            (self.shape.get_x()) / (WIDTH/2.0) - 1.0,
-            (self.shape.get_y()) / (HEIGHT/2.0) - 1.0
-        )
+}
+
+impl Dynamic<(&TileMap,&mut [MysteryBlocks],&mut [Goomba])> for Player {
+    fn reset(&mut self) {
+        self.clear_velocity();
+        self.shape.pos = self.spos;
+        self.change_sprite_status(PStatus::Walk);
 
     }
 
+    fn update(&mut self, entity: (&TileMap, &mut [MysteryBlocks], &mut [Goomba])) {
+
+        let (tiles,mblocks,goombas) = entity;
+
+        if self.status != PStatus::Dead {
+
+            if self.jumping {
+
+                if self.jump_ctn >= -10 {
+                    self.velocity.y += (self.jump_ctn as f32 + 10.0) * 0.5;
+                    self.jump_ctn -= 1;
+
+                } else {
+                    self.jumping = false;
+                    self.jump_ctn = 0;
+                }
+
+            }
+
+            let mut gravity_velocity = (self.fall_ctn as f32 / 60.0 ) * -GRAVITY;
+            if gravity_velocity < -5.0 {
+                gravity_velocity = -5.0;
+            }
+
+            self.fall_ctn += 1;
+            self.velocity.y += gravity_velocity;
+
+            if self.velocity.x + self.shape.pos.x < 0.0 {
+                self.velocity.x = 0.0;
+            }
+
+            self.check_collision_w_mblocks(mblocks);
+            self.check_collision_w_static(tiles);
+            self.check_collision_w_enemy(goombas);
+
+
+            if self.velocity.y == 0.0 {
+                self.can_jump = true;
+            } else if self.velocity.y < 0.0 {
+                self.can_jump = false;
+            }
+
+            self.shape.pos += self.velocity;
+
+            if self.status != PStatus::Dead {
+                if self.velocity.x == 0.0 && self.velocity.y == 0.0 {
+                    self.change_sprite_status(PStatus::Idle)
+                } else if self.velocity.x != 0.0 && self.velocity.y == 0.0 {
+                    self.change_sprite_status(PStatus::Walk);
+                } else if self.velocity.y != 0.0 {
+                    self.change_sprite_status(PStatus::Jump);
+                }
+
+            }
+
+
+        }
+
+        self.update_sprite().unwrap();
+
+
+
+    }
 
 }
+
 
 impl SpriteUser for Player {
     fn reload_sprite(&mut self) {
