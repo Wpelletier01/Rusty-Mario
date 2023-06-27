@@ -6,8 +6,6 @@ use crate::declaration::{
     WIDTH,
     NORM_HEIGHT_TILE_SIZE,
     NORM_WIDTH_TILE_SIZE,
-    MAP_WIDTH,
-    MAP_HEIGHT,
     GRAVITY,
     ASSETS_DIR
 
@@ -16,7 +14,7 @@ use crate::map::TileMap;
 
 use lib_game::shape::{Rect, Shape, ShapeType};
 use lib_game::vector::Vec2;
-use lib_game::sprite::{SpriteSheet,Frame};
+use lib_game::sprite::SpriteSheet;
 use lib_game::GResult;
 use lib_game::collision;
 
@@ -24,18 +22,11 @@ use macroquad::prelude::{
     DrawTextureParams,
     Texture2D,
     load_texture,
-    draw_texture,
     draw_texture_ex,
     vec2 as v2,
     Rect as r,
     WHITE
 };
-
-const JUMP_FORCE:f32 = 50.0;
-
-
-const SMALL_SIZE:Vec2 = Vec2 { x:16.0, y:16.0 };
-const BIG_SIZE:Vec2 = Vec2 { x:16.0, y: 32.0 };
 
 
 
@@ -51,8 +42,6 @@ pub struct Player {
     spos:               Vec2,
     shape:              Rect,
     velocity:           Vec2,
-    jumping_velocity:   f32,
-    landing:            bool,
     can_jump:           bool,
     jumping:            bool,
     jump_ctn:           i32,
@@ -100,11 +89,9 @@ impl Player {
             spos:   start_pos,
             shape: Rect::new(start_pos.x,start_pos.y,TILE_SIZE,TILE_SIZE),
             velocity: Vec2::new(0.0,0.0),
-            jumping_velocity: JUMP_FORCE,
             can_jump: true,
             jumping:  false,
             fall_ctn: 0,
-            landing: false,
             spritesheet_src,
             spritesheet,
             draw_info:dinfo,
@@ -136,15 +123,16 @@ impl Player {
         }
 
     }
-    pub fn set_position(&mut self,position:Vec2)  { self.shape.pos = position; }
+
     pub fn get_x(&self) -> f32 { self.shape.pos.x }
     pub fn get_y(&self) -> f32 { self.shape.pos.y }
+
     pub fn get_rect(&self) -> &Rect { &self.shape }
-    pub fn get_current_velocity(&self) -> Vec2 { self.velocity }
+
     pub fn get_xvelocity(&self) -> f32 { self.velocity.x }
     pub fn get_yvelocity(&self) -> f32 { self.velocity.y }
+
     pub fn set_xvelocity(&mut self,x:f32) { self.velocity.x += x; }
-    pub fn set_yvelocity(&mut self,y:f32) { self.velocity.y += y; }
     pub fn get_height(&self) -> f32 { self.shape.get_height() }
     pub fn is_dying(&self) -> bool { self.status == PStatus::Dead }
 
@@ -337,13 +325,12 @@ impl Player {
                         self.fall_ctn = 0;
                         self.jumping = false;
                         self.jump_ctn = 10;
-                        self.landing = true;
                         self.shape.pos.y = block.get_rect().get_y() + self.get_height();
                         self.velocity.y = 0.0;
 
                     } else {
                         block.collect();
-                        self.shape.pos.y = block.get_rect().get_y() - 16.0;
+                        self.shape.pos.y = block.get_rect().get_y() - TILE_SIZE;
                         self.velocity.y = 0.0;
                         self.fall_ctn = 0;
                         self.jumping = false;
@@ -434,7 +421,6 @@ impl Player {
                         self.fall_ctn = 0;
                         self.jumping = false;
                         self.jump_ctn = 10;
-                        self.landing = true;
                         self.shape.pos.y = tile.get_rect().get_y() + self.get_height();
                         self.velocity.y = 0.0;
 
