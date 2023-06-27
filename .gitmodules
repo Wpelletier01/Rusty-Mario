@@ -1,0 +1,3 @@
+[submodule "lib-game"]
+	path = lib-game
+	url = https://github.com/Wpelletier01/lib-game.git
